@@ -1,0 +1,34 @@
+# Environment and secrets (never commit)
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+*.pem
+secrets/
+*.key
+
+# Dependencies
+node_modules/
+
+# OS and editor junk
+.DS_Store
+.DS_Store?
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-*
+
+# Build / cache (if you add these later)
+dist/
+build/
+.cache/
+*.log
+npm-debug.log*
+
+# Optional: local overrides (if you ever add)
+config.local.js
+config.local.json

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="description" content="Practice graphic design layouts with simple shapes" />
+  <title>Layout Practice</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="manifest" href="manifest.json" />
+</head>
+<body>
+  <div id="app">
+    <!-- Home: today's challenge -->
+    <section id="view-home" class="view">
+      <header class="header">
+        <h1>Layout Practice</h1>
+        <p class="tagline">Shapes · Space · Composition</p>
+      </header>
+      <div class="home-content">
+        <p class="today-label">Today’s challenge</p>
+        <div id="home-progress" class="progress-dots"></div>
+        <p id="home-status" class="status-text">0 of 3 layouts done</p>
+        <button id="btn-start" type="button" class="btn btn-primary">Start layout</button>
+        <button id="btn-gallery" type="button" class="btn btn-secondary">View gallery</button>
+      </div>
+    </section>
+
+    <!-- Canvas: design area -->
+    <section id="view-canvas" class="view hidden">
+      <header class="header compact">
+        <button id="btn-back-canvas" type="button" class="btn-icon" aria-label="Back">←</button>
+        <span id="canvas-title">Layout 1 of 3</span>
+        <button id="btn-submit" type="button" class="btn btn-primary small">Submit</button>
+      </header>
+      <div class="canvas-wrap">
+        <p class="canvas-hint" aria-hidden="true">Tap a shape to select · Drag corners to resize · Use ↻ to rotate</p>
+        <div id="canvas-container">
+          <svg id="design-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+          <div id="selection-ui" class="hidden">
+            <div id="selection-box"></div>
+            <div id="resize-handles"></div>
+            <div id="rotate-handle"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Gallery: trios by date -->
+    <section id="view-gallery" class="view hidden">
+      <header class="header compact">
+        <button id="btn-back-gallery" type="button" class="btn-icon" aria-label="Back">←</button>
+        <h2 class="header-title">Gallery</h2>
+        <span aria-hidden="true"></span>
+      </header>
+      <div id="gallery-list" class="gallery-list"></div>
+    </section>
+
+    <!-- Feedback: after 3 layouts -->
+    <section id="view-feedback" class="view hidden">
+      <header class="header compact">
+        <button id="btn-back-feedback" type="button" class="btn-icon" aria-label="Back">←</button>
+        <h2 class="header-title">Feedback</h2>
+        <span aria-hidden="true"></span>
+      </header>
+      <div id="feedback-content" class="feedback-content"></div>
+      <button id="btn-done-feedback" type="button" class="btn btn-primary">Done</button>
+    </section>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
