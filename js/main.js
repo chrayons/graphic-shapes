@@ -247,8 +247,8 @@ function renderGallery() {
 
 function init() {
   const container = document.getElementById('canvas-container');
-  const svg = document.getElementById('design-svg');
-  canvas.initCanvas(container, svg);
+  const canvasEl = document.getElementById('design-canvas');
+  canvas.initCanvas(container, canvasEl);
 
   document.getElementById('btn-start').addEventListener('click', () => {
     if (document.getElementById('btn-start').dataset.action === 'feedback') {

@@ -22,7 +22,8 @@ const SHAPE_TYPES = ['square', 'circle', 'triangle'];
 let shapes = [];
 let selectedId = null;
 let containerEl = null;
-let svgEl = null;
+let canvasEl = null;
+let ctx = null;
 let selectionUI = null;
 let selectionBox = null;
 let resizeHandles = null;
@@ -46,17 +47,15 @@ function randomShape(id) {
   return createShape(id, type, x, y, width, height, 0);
 }
 
-export function initCanvas(container, svg) {
+export function initCanvas(container, canvas) {
   containerEl = container;
-  svgEl = svg;
+  canvasEl = canvas;
+  ctx = canvasEl.getContext('2d');
   selectionUI = container.querySelector('#selection-ui');
   selectionBox = container.querySelector('#selection-box');
   resizeHandles = container.querySelector('#resize-handles');
   rotateHandle = container.querySelector('#rotate-handle');
 
-  svgEl.setAttribute('viewBox', `0 0 ${CANVAS_W} ${CANVAS_H}`);
-  svgEl.setAttribute('width', '100%');
-  svgEl.setAttribute('height', '100%');
   containerEl.style.aspectRatio = `${CANVAS_W} / ${CANVAS_H}`;
   containerEl.style.maxWidth = `${CANVAS_W}px`;
   containerEl.style.width = '100%';
@@ -67,7 +66,7 @@ export function initCanvas(container, svg) {
   window.addEventListener('pointercancel', onPointerUp);
 }
 
-function getSvgPoint(clientX, clientY) {
+function getCanvasPoint(clientX, clientY) {
   const rect = containerEl.getBoundingClientRect();
   const scaleX = CANVAS_W / rect.width;
   const scaleY = CANVAS_H / rect.height;
@@ -80,12 +79,14 @@ function getSvgPoint(clientX, clientY) {
 function hitTestShape(sx, sy) {
   for (let i = shapes.length - 1; i >= 0; i--) {
     const s = shapes[i];
-    if (pointInShapeBounds(sx, sy, s)) return s.id;
+    if (pointInShapeBounds(sx, sy, s)) {
+      return s.id;
+    }
   }
   return null;
 }
 
-/** Hit-test using the shape's bounding box (matches the visible selection box). */
+/** Hit-test using the shape's rotated bounding box. */
 function pointInShapeBounds(px, py, s) {
   const b = getShapeBounds(s);
   return px >= b.left && px <= b.left + b.width &&
@@ -101,31 +102,7 @@ function getShapeBounds(shape) {
   const cx = shape.x;
   const cy = shape.y;
 
-  if (shape.type === 'triangle') {
-    // Triangle in SVG: points (0, -hh), (hw, hh), (-hw, hh) with transform translate(cx,cy) rotate(θ) translate(-w/2,-h/2)
-    // So world = (cx,cy) + R(θ) * (p - (hw, hh))
-    const px1 = 0 - hw, py1 = -hh - hh;
-    const px2 = hw - hw, py2 = hh - hh;
-    const px3 = -hw - hw, py3 = hh - hh;
-    const x1 = cx + px1 * cos - py1 * sin;
-    const y1 = cy + px1 * sin + py1 * cos;
-    const x2 = cx + px2 * cos - py2 * sin;
-    const y2 = cy + px2 * sin + py2 * cos;
-    const x3 = cx + px3 * cos - py3 * sin;
-    const y3 = cy + px3 * sin + py3 * cos;
-    const left = Math.min(x1, x2, x3);
-    const top = Math.min(y1, y2, y3);
-    const right = Math.max(x1, x2, x3);
-    const bottom = Math.max(y1, y2, y3);
-    return {
-      left,
-      top,
-      width: right - left,
-      height: bottom - top,
-    };
-  }
-
-  // Rectangle/circle: AABB of rotated rectangle
+  // All shapes: (x,y) is the AABB center; use rotated box formula for consistent resize
   const w = hw * Math.abs(cos) + hh * Math.abs(sin);
   const h = hw * Math.abs(sin) + hh * Math.abs(cos);
   return {
@@ -146,76 +123,86 @@ function updateSelectionUI() {
     selectionUI.classList.add('hidden');
     return;
   }
-  const b = getShapeBounds(shape);
+  // Position selection UI at the shape center so rotation happens around it
   const rect = containerEl.getBoundingClientRect();
   const scaleX = rect.width / CANVAS_W;
   const scaleY = rect.height / CANVAS_H;
-  selectionBox.style.left = b.left * scaleX + 'px';
-  selectionBox.style.top = b.top * scaleY + 'px';
-  selectionBox.style.width = b.width * scaleX + 'px';
-  selectionBox.style.height = b.height * scaleY + 'px';
+  const centerX = shape.x * scaleX;
+  const centerY = shape.y * scaleY;
+
+  selectionUI.style.left = `${centerX}px`;
+  selectionUI.style.top = `${centerY}px`;
+  selectionUI.style.right = 'auto';
+  selectionUI.style.bottom = 'auto';
+  selectionUI.style.width = '0px';
+  selectionUI.style.height = '0px';
+
+  const boxW = shape.width * scaleX;
+  const boxH = shape.height * scaleY;
+  selectionBox.style.left = `${-boxW / 2}px`;
+  selectionBox.style.top = `${-boxH / 2}px`;
+  selectionBox.style.width = `${boxW}px`;
+  selectionBox.style.height = `${boxH}px`;
 
   resizeHandles.innerHTML = '';
   const positions = [
-    [0, 0], [0.5, 0], [1, 0],
-    [0, 0.5], [1, 0.5],
-    [0, 1], [0.5, 1], [1, 1],
+    [-0.5, -0.5], [0, -0.5], [0.5, -0.5],
+    [-0.5, 0], [0.5, 0],
+    [-0.5, 0.5], [0, 0.5], [0.5, 0.5],
   ];
   positions.forEach(([fx, fy], i) => {
     const div = document.createElement('div');
     div.className = 'resize-handle';
     div.dataset.handleIndex = String(i);
-    div.style.left = (b.left + b.width * fx) * scaleX + 'px';
-    div.style.top = (b.top + b.height * fy) * scaleY + 'px';
+    div.style.left = `${fx * boxW}px`;
+    div.style.top = `${fy * boxH}px`;
     resizeHandles.appendChild(div);
   });
 
-  rotateHandle.style.left = (shape.x * scaleX) + 'px';
-  rotateHandle.style.top = ((b.top - ROTATE_HANDLE_OFFSET) * scaleY) + 'px';
+  const handleOffset = ROTATE_HANDLE_OFFSET * ((scaleX + scaleY) / 2);
+  rotateHandle.style.left = '0px';
+  rotateHandle.style.top = `${-boxH / 2 - handleOffset}px`;
+
+  selectionUI.style.transformOrigin = 'center center';
+  selectionUI.style.transform = `rotate(${shape.rotation * 180 / Math.PI}deg)`;
   selectionUI.classList.remove('hidden');
 }
 
 function renderShapes() {
-  svgEl.innerHTML = '';
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
   shapes.forEach(shape => {
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    g.dataset.shapeId = shape.id;
-    g.setAttribute('transform', `translate(${shape.x},${shape.y}) rotate(${shape.rotation}) translate(${-shape.width/2},${-shape.height/2})`);
-
+    ctx.save();
+    ctx.translate(shape.x, shape.y);
+    ctx.rotate(shape.rotation);
+    ctx.fillStyle = '#000';
     if (shape.type === 'square') {
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('width', shape.width);
-      rect.setAttribute('height', shape.height);
-      rect.setAttribute('fill', '#000');
-      g.appendChild(rect);
+      ctx.fillRect(-shape.width / 2, -shape.height / 2, shape.width, shape.height);
     } else if (shape.type === 'circle') {
-      const ellipse = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
-      ellipse.setAttribute('cx', shape.width / 2);
-      ellipse.setAttribute('cy', shape.height / 2);
-      ellipse.setAttribute('rx', shape.width / 2);
-      ellipse.setAttribute('ry', shape.height / 2);
-      ellipse.setAttribute('fill', '#000');
-      g.appendChild(ellipse);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, shape.width / 2, shape.height / 2, 0, 0, 2 * Math.PI);
+      ctx.fill();
     } else if (shape.type === 'triangle') {
-      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      ctx.beginPath();
       const hw = shape.width / 2, hh = shape.height / 2;
-      poly.setAttribute('points', `0,${-hh} ${hw},${hh} ${-hw},${hh}`);
-      poly.setAttribute('fill', '#000');
-      g.appendChild(poly);
+      ctx.moveTo(0, -hh);
+      ctx.lineTo(hw, hh);
+      ctx.lineTo(-hw, hh);
+      ctx.closePath();
+      ctx.fill();
     }
-
-    svgEl.appendChild(g);
+    ctx.restore();
   });
   updateSelectionUI();
 }
 
 function onPointerDown(e) {
   if (e.button !== 0 && e.pointerType === 'mouse') return;
-  const pt = getSvgPoint(e.clientX, e.clientY);
+  const pt = getCanvasPoint(e.clientX, e.clientY);
 
   const handleIndex = e.target.closest('.resize-handle')?.dataset?.handleIndex;
   if (handleIndex != null) {
     const idx = parseInt(handleIndex, 10);
+    if (isNaN(idx) || idx < 0 || idx > 7) return;
     const shape = shapes.find(s => s.id === selectedId);
     if (shape) {
       dragState = { type: 'resize', shapeId: shape.id, handleIndex: idx, startX: pt.x, startY: pt.y, startShape: { ...shape } };
@@ -239,7 +226,6 @@ function onPointerDown(e) {
   const hitId = hitTestShape(pt.x, pt.y);
   if (hitId) {
     selectedId = hitId;
-    updateSelectionUI();
     const shape = shapes.find(s => s.id === hitId);
     if (shape) {
       dragState = { type: 'shape', shapeId: hitId, startX: pt.x, startY: pt.y, startShapeX: shape.x, startShapeY: shape.y };
@@ -248,25 +234,32 @@ function onPointerDown(e) {
     }
   } else {
     selectedId = null;
-    updateSelectionUI();
   }
+  renderShapes();
 }
 
 function onPointerMove(e) {
   if (!dragState) return;
-  const pt = getSvgPoint(e.clientX, e.clientY);
+  const pt = getCanvasPoint(e.clientX, e.clientY);
   const shape = shapes.find(s => s.id === dragState.shapeId);
   if (!shape) return;
+
+  // Minimum drag distance threshold (2px) to avoid accidental drags on click
+  const dx = pt.x - dragState.startX;
+  const dy = pt.y - dragState.startY;
+  const dragDist = Math.sqrt(dx * dx + dy * dy);
+  const MIN_DRAG_DIST = 2;
 
   if (dragState.type === 'shape') {
     shape.x = dragState.startShapeX + (pt.x - dragState.startX);
     shape.y = dragState.startShapeY + (pt.y - dragState.startY);
-    shape.x = Math.max(shape.width/2, Math.min(CANVAS_W - shape.width/2, shape.x));
-    shape.y = Math.max(shape.height/2, Math.min(CANVAS_H - shape.height/2, shape.y));
   } else if (dragState.type === 'resize') {
+    // Only apply resize after minimum drag distance
+    if (dragDist < MIN_DRAG_DIST) return;
+
     const i = dragState.handleIndex;
     const start = dragState.startShape;
-    const rad = (start.rotation * Math.PI) / 180;
+    const rad = start.rotation;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
     const w = start.width;
@@ -274,90 +267,38 @@ function onPointerMove(e) {
     const b = getShapeBounds(start);
 
     if (CORNER_HANDLES.includes(i)) {
-      // Canva-style: corner drag = proportional scale. Fixed point = AABB corner opposite to the handle.
-      let fixedWorldX, fixedWorldY;
-      if (i === 0) {
-        fixedWorldX = b.left + b.width;
-        fixedWorldY = b.top + b.height;
-      } else if (i === 2) {
-        fixedWorldX = b.left;
-        fixedWorldY = b.top + b.height;
-      } else if (i === 5) {
-        fixedWorldX = b.left + b.width;
-        fixedWorldY = b.top;
-      } else {
-        fixedWorldX = b.left;
-        fixedWorldY = b.top;
-      }
-      const dx = fixedWorldX - pt.x;
-      const dy = fixedWorldY - pt.y;
-      const diagonal = Math.sqrt(w * w + h * h);
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      let s = diagonal > 1e-4 ? dist / diagonal : 1;
+      // Proportional resize from center
+      const oldDist = Math.sqrt((w / 2) ** 2 + (h / 2) ** 2);
+      const newDist = Math.sqrt((pt.x - shape.x) ** 2 + (pt.y - shape.y) ** 2);
+      let s = oldDist > 0 ? newDist / oldDist : 1;
       s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, s));
       const nw = Math.max(MIN_SIZE, s * w);
       const nh = Math.max(MIN_SIZE, s * h);
       shape.width = nw;
       shape.height = nh;
-      // New center so this AABB corner stays at (fixedWorldX, fixedWorldY). Which local corner that is depends on handle.
-      if (i === 0) {
-        shape.x = fixedWorldX - (nw / 2) * cos + (nh / 2) * sin;
-        shape.y = fixedWorldY - (nw / 2) * sin - (nh / 2) * cos;
-      } else if (i === 2) {
-        shape.x = fixedWorldX + (nw / 2) * cos + (nh / 2) * sin;
-        shape.y = fixedWorldY + (nw / 2) * sin - (nh / 2) * cos;
-      } else if (i === 5) {
-        shape.x = fixedWorldX - (nw / 2) * cos - (nh / 2) * sin;
-        shape.y = fixedWorldY - (nw / 2) * sin + (nh / 2) * cos;
-      } else {
-        shape.x = fixedWorldX + (nw / 2) * cos - (nh / 2) * sin;
-        shape.y = fixedWorldY + (nw / 2) * sin + (nh / 2) * cos;
-      }
+      // Center stays fixed
     } else {
-      // Edge handle: single-axis resize (stretch width or height only), opposite edge fixed
-      const absCos = Math.abs(cos);
-      const absSin = Math.abs(sin);
-      if (i === 1) {
-        // Top edge to pt.y: bottom edge fixed
-        const fixedBottomY = start.y + (h / 2) * cos;
-        const newAabbH = Math.max(20, fixedBottomY - pt.y);
-        let nh = absCos >= 1e-4 ? (newAabbH - w * absSin) / absCos : h;
-        nh = Math.max(MIN_SIZE, nh);
-        shape.height = nh;
-        shape.y = fixedBottomY - (nh / 2) * cos;
-        shape.x = start.x;
-      } else if (i === 6) {
-        // Bottom edge to pt.y: top edge fixed
-        const fixedTopY = start.y - (h / 2) * cos;
-        const newAabbH = Math.max(20, pt.y - fixedTopY);
-        let nh = absCos >= 1e-4 ? (newAabbH - w * absSin) / absCos : h;
-        nh = Math.max(MIN_SIZE, nh);
-        shape.height = nh;
-        shape.y = fixedTopY + (nh / 2) * cos;
-        shape.x = start.x;
-      } else if (i === 3) {
-        // Left edge to pt.x: right edge fixed
-        const fixedRightX = start.x + (w / 2) * cos;
-        const newAabbW = Math.max(20, fixedRightX - pt.x);
-        let nw = absCos >= 1e-4 ? (newAabbW - h * absSin) / absCos : w;
-        nw = Math.max(MIN_SIZE, nw);
-        shape.width = nw;
-        shape.x = fixedRightX - (nw / 2) * cos;
-        shape.y = start.y;
-      } else {
-        // Right edge (i === 4) to pt.x: left edge fixed
-        const fixedLeftX = start.x - (w / 2) * cos;
-        const newAabbW = Math.max(20, pt.x - fixedLeftX);
-        let nw = absCos >= 1e-4 ? (newAabbW - h * absSin) / absCos : w;
-        nw = Math.max(MIN_SIZE, nw);
-        shape.width = nw;
-        shape.x = fixedLeftX + (nw / 2) * cos;
-        shape.y = start.y;
+      // Edge resize from center, center stays fixed
+      if (i === 1) { // top
+        const newH = (shape.y + h / 2) - pt.y;
+        shape.height = Math.max(MIN_SIZE, newH);
+      } else if (i === 6) { // bottom
+        const newH = pt.y - (shape.y - h / 2);
+        shape.height = Math.max(MIN_SIZE, newH);
+      } else if (i === 3) { // left
+        const newW = (shape.x + w / 2) - pt.x;
+        shape.width = Math.max(MIN_SIZE, newW);
+      } else if (i === 4) { // right
+        const newW = pt.x - (shape.x - w / 2);
+        shape.width = Math.max(MIN_SIZE, newW);
       }
     }
   } else if (dragState.type === 'rotate') {
+    // Only apply rotation after minimum drag distance
+    if (dragDist < MIN_DRAG_DIST) return;
+
     const angle = Math.atan2(pt.y - shape.y, pt.x - shape.x);
-    let delta = (angle - dragState.startAngle) * 180 / Math.PI;
+    const delta = angle - dragState.startAngle;
     shape.rotation = dragState.startRotation + delta;
   }
 
@@ -408,22 +349,30 @@ export function exportImageDataUrl() {
   ctx.fillStyle = '#fafafa';
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  const svgData = new XMLSerializer().serializeToString(svgEl);
-  const img = new Image();
-  const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  return new Promise((resolve) => {
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve(null);
-    };
-    img.src = url;
+  shapes.forEach(shape => {
+    ctx.save();
+    ctx.translate(shape.x, shape.y);
+    ctx.rotate(shape.rotation);
+    ctx.fillStyle = '#000';
+    if (shape.type === 'square') {
+      ctx.fillRect(-shape.width / 2, -shape.height / 2, shape.width, shape.height);
+    } else if (shape.type === 'circle') {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, shape.width / 2, shape.height / 2, 0, 0, 2 * Math.PI);
+      ctx.fill();
+    } else if (shape.type === 'triangle') {
+      ctx.beginPath();
+      const hw = shape.width / 2, hh = shape.height / 2;
+      ctx.moveTo(0, -hh);
+      ctx.lineTo(hw, hh);
+      ctx.lineTo(-hw, hh);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
   });
+
+  return canvas.toDataURL('image/png');
 }
 
 export function getCanvasDimensions() {

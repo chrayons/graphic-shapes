@@ -249,7 +249,7 @@ html, body {
   border-radius: 0;
   box-shadow: var(--shadow-canvas);
   touch-action: none;
-  overflow: hidden;
+  overflow: visible;
 }
 #design-svg {
   display: block;
