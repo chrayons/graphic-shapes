@@ -29,6 +29,9 @@ build/
 *.log
 npm-debug.log*
 
+# Vercel
+.vercel
+
 # Optional: local overrides (if you ever add)
 config.local.js
 config.local.json
