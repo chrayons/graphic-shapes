@@ -281,15 +281,23 @@ html, body {
 }
 
 /* Feedback view */
+#view-feedback {
+  align-items: center;
+}
 .feedback-image-wrap {
   margin: var(--space-md) 0 var(--space-sm);
+  width: 100%;
+  max-width: 360px;
 }
 .feedback-submitted-img {
   width: 100%;
-  max-width: 360px;
   display: block;
   border: 1px solid var(--border-light);
   box-shadow: var(--shadow-canvas);
+}
+.feedback-critique {
+  width: 100%;
+  max-width: 360px;
 }
 
 /* Last-round feedback accordion (shown during drawing) */
