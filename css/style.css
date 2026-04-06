@@ -284,6 +284,9 @@ html, body {
 #view-feedback {
   align-items: center;
 }
+#view-feedback .header {
+  align-self: stretch;
+}
 .feedback-image-wrap {
   margin: var(--space-md) 0 var(--space-sm);
   width: 100%;
