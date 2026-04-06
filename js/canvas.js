@@ -60,7 +60,7 @@ export function initCanvas(container, canvas) {
   containerEl.style.maxWidth = `${CANVAS_W}px`;
   containerEl.style.width = '100%';
 
-  containerEl.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('pointercancel', onPointerUp);
@@ -86,17 +86,21 @@ function hitTestShape(sx, sy) {
   return null;
 }
 
-/** Hit-test using the shape's rotated bounding box. */
+/** Hit-test in the shape's local coordinate space (correct for any rotation). */
 function pointInShapeBounds(px, py, s) {
-  const b = getShapeBounds(s);
-  return px >= b.left && px <= b.left + b.width &&
-         py >= b.top && py <= b.top + b.height;
+  const dx = px - s.x;
+  const dy = py - s.y;
+  const cos = Math.cos(-s.rotation);
+  const sin = Math.sin(-s.rotation);
+  const localX = dx * cos - dy * sin;
+  const localY = dx * sin + dy * cos;
+  return Math.abs(localX) <= s.width / 2 && Math.abs(localY) <= s.height / 2;
 }
 
 function getShapeBounds(shape) {
   const hw = shape.width / 2;
   const hh = shape.height / 2;
-  const rad = (shape.rotation * Math.PI) / 180;
+  const rad = shape.rotation; // already in radians (set via Math.atan2)
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
   const cx = shape.x;
@@ -197,6 +201,9 @@ function renderShapes() {
 
 function onPointerDown(e) {
   if (e.button !== 0 && e.pointerType === 'mouse') return;
+  const isHandle = e.target.closest('.resize-handle') || e.target.closest('#rotate-handle');
+  const isCanvas = e.target.closest('#canvas-container');
+  if (!isHandle && !isCanvas) return;
   const pt = getCanvasPoint(e.clientX, e.clientY);
 
   const handleIndex = e.target.closest('.resize-handle')?.dataset?.handleIndex;
@@ -207,7 +214,7 @@ function onPointerDown(e) {
     if (shape) {
       dragState = { type: 'resize', shapeId: shape.id, handleIndex: idx, startX: pt.x, startY: pt.y, startShape: { ...shape } };
       e.preventDefault();
-      containerEl.setPointerCapture?.(e.pointerId);
+      e.target.setPointerCapture?.(e.pointerId);
     }
     return;
   }
@@ -218,7 +225,7 @@ function onPointerDown(e) {
       const startAngle = Math.atan2(pt.y - shape.y, pt.x - shape.x);
       dragState = { type: 'rotate', shapeId: shape.id, startAngle, startRotation: shape.rotation, startX: pt.x, startY: pt.y };
       e.preventDefault();
-      containerEl.setPointerCapture?.(e.pointerId);
+      e.target.setPointerCapture?.(e.pointerId);
     }
     return;
   }
@@ -230,7 +237,7 @@ function onPointerDown(e) {
     if (shape) {
       dragState = { type: 'shape', shapeId: hitId, startX: pt.x, startY: pt.y, startShapeX: shape.x, startShapeY: shape.y };
       e.preventDefault();
-      containerEl.setPointerCapture?.(e.pointerId);
+      e.target.setPointerCapture?.(e.pointerId);
     }
   } else {
     selectedId = null;
@@ -259,38 +266,34 @@ function onPointerMove(e) {
 
     const i = dragState.handleIndex;
     const start = dragState.startShape;
-    const rad = start.rotation;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
     const w = start.width;
     const h = start.height;
-    const b = getShapeBounds(start);
 
     if (CORNER_HANDLES.includes(i)) {
-      // Proportional resize from center
+      // Proportional resize from center (rotation-invariant: uses Euclidean distance)
       const oldDist = Math.sqrt((w / 2) ** 2 + (h / 2) ** 2);
       const newDist = Math.sqrt((pt.x - shape.x) ** 2 + (pt.y - shape.y) ** 2);
       let s = oldDist > 0 ? newDist / oldDist : 1;
       s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, s));
-      const nw = Math.max(MIN_SIZE, s * w);
-      const nh = Math.max(MIN_SIZE, s * h);
-      shape.width = nw;
-      shape.height = nh;
-      // Center stays fixed
+      shape.width  = Math.max(MIN_SIZE, s * w);
+      shape.height = Math.max(MIN_SIZE, s * h);
     } else {
-      // Edge resize from center, center stays fixed
-      if (i === 1) { // top
-        const newH = (shape.y + h / 2) - pt.y;
-        shape.height = Math.max(MIN_SIZE, newH);
-      } else if (i === 6) { // bottom
-        const newH = pt.y - (shape.y - h / 2);
-        shape.height = Math.max(MIN_SIZE, newH);
-      } else if (i === 3) { // left
-        const newW = (shape.x + w / 2) - pt.x;
-        shape.width = Math.max(MIN_SIZE, newW);
-      } else if (i === 4) { // right
-        const newW = pt.x - (shape.x - w / 2);
-        shape.width = Math.max(MIN_SIZE, newW);
+      // Edge resize: transform mouse into shape's local space so rotation is handled correctly
+      const dx = pt.x - shape.x;
+      const dy = pt.y - shape.y;
+      const cos = Math.cos(-shape.rotation);
+      const sin = Math.sin(-shape.rotation);
+      const localX =  dx * cos - dy * sin;
+      const localY =  dx * sin + dy * cos;
+
+      if (i === 1) { // top edge  — localY is negative above center
+        shape.height = Math.max(MIN_SIZE, -2 * localY);
+      } else if (i === 6) { // bottom edge
+        shape.height = Math.max(MIN_SIZE,  2 * localY);
+      } else if (i === 3) { // left edge  — localX is negative left of center
+        shape.width  = Math.max(MIN_SIZE, -2 * localX);
+      } else if (i === 4) { // right edge
+        shape.width  = Math.max(MIN_SIZE,  2 * localX);
       }
     }
   } else if (dragState.type === 'rotate') {
