@@ -98,10 +98,6 @@ function getDesignFeedback(shapes) {
 
   const xs = shapeData.map(s => s.x);
   const ys = shapeData.map(s => s.y);
-  const horizontalSpread = Math.max(...xs) - Math.min(...xs);
-  const verticalSpread = Math.max(...ys) - Math.min(...ys);
-  const spread = Math.max(horizontalSpread, verticalSpread);
-
   const coverage = totalArea / (CANVAS_W * CANVAS_H);
 
   const comX = shapeData.reduce((s, sh) => s + sh.x * sh.area, 0) / totalArea;
@@ -137,123 +133,116 @@ function getDesignFeedback(shapes) {
   }
   const hasOverlap = overlapCount > 0;
 
-  const hasAccent = shapeData.some(s => s.color && !['#4a4a4a', '#333', '#666', '#888', 'gray', 'grey', '#3d3d3d'].includes(s.color?.toLowerCase()));
-
   const dominanceRatio = largest.area / totalArea;
   const has7030 = dominanceRatio >= 0.55 && dominanceRatio <= 0.85;
 
   const sections = [];
 
-  let hierarchyContent = '';
-  let hierarchyStatus = '✗';
+  // 1. Emphasis — is there a clear focal point?
+  let emphasisContent = '';
+  let emphasisStatus = '✗';
   if (largestRatio >= 6) {
-    hierarchyContent = `Strong big/medium/small contrast. Largest (${largest.sizeLabel}) is ${largestRatio.toFixed(0)}× the smallest—clear dominance.`;
-    hierarchyStatus = '✓';
+    emphasisContent = `Emphasis is working. The largest shape (${largest.sizeLabel}) is ${largestRatio.toFixed(0)}× the smallest—the eye has no choice but to land there first. Clear primary → accent hierarchy.`;
+    emphasisStatus = '✓';
   } else if (largestRatio >= 3) {
     const targetW = Math.round(largest.width * 1.5);
     const targetH = Math.round(largest.height * 1.5);
-    hierarchyContent = `Decent contrast (${largestRatio.toFixed(1)}×) but push it further. Scale your largest shape to ~${targetW}×${targetH}—the size gap should feel almost uncomfortable.`;
-    hierarchyStatus = '◐';
+    emphasisContent = `Emphasis is present but not decisive (${largestRatio.toFixed(1)}× size range). The dominant shape reads as slightly bigger, not unmistakably primary. Scale it to ~${targetW}×${targetH} so the hierarchy is instant—not something the viewer has to deduce.`;
+    emphasisStatus = '◐';
   } else if (largestRatio >= 1.5) {
     const targetW = Math.round(smallest.width * 4);
     const targetH = Math.round(smallest.height * 4);
-    hierarchyContent = `Weak hierarchy (${largestRatio.toFixed(1)}× range). Make one shape truly dominate: at least 4× the smallest. A ${targetW}×${targetH} anchor against tiny ${smallest.sizeLabel} accents would read instantly.`;
-    hierarchyStatus = '✗';
+    emphasisContent = `Emphasis is failing (${largestRatio.toFixed(1)}× range). All shapes compete for attention—none wins. Establish one focal point: make the largest shape at least 4× the area of the smallest. A ${targetW}×${targetH} anchor with ${smallest.sizeLabel} accents would create an immediate reading order.`;
+    emphasisStatus = '✗';
   } else {
-    hierarchyContent = `No hierarchy—all shapes are nearly the same size (~${largest.sizeLabel}). Pick one to be the hero: make it 5–8× bigger than the rest.`;
-    hierarchyStatus = '✗';
+    emphasisContent = `No emphasis—every shape is nearly the same size (~${largest.sizeLabel}). The eye has nowhere to start. Pick one shape to be the hero and scale it to 5–8× the others. Without a focal point, this is a pattern, not a composition.`;
+    emphasisStatus = '✗';
   }
-  sections.push({ title: 'Size Hierarchy', content: hierarchyContent, status: hierarchyStatus });
+  sections.push({ title: 'Emphasis', content: emphasisContent, status: emphasisStatus });
 
-  let placementContent = '';
-  let placementStatus = '◐';
+  // 2. Balance — distribution of visual weight
+  let balanceContent = '';
+  let balanceStatus = '◐';
   if (largestNearThirds) {
-    placementContent = `Dominant shape sits near a rule-of-thirds intersection—that's why it feels placed rather than dropped. The ${Math.abs(offsetX) > 30 ? 'off-center weight creates dynamic tension' : 'centered weight creates stability'}.`;
-    placementStatus = '✓';
+    balanceContent = `Balance is intentional. The dominant shape anchors near a rule-of-thirds intersection, creating ${Math.abs(offsetX) > 30 ? 'asymmetric tension—the off-center weight implies deliberate choice' : 'stable, centered weight'}. The composition feels placed, not dropped.`;
+    balanceStatus = '✓';
   } else if (largestOnCenter) {
-    placementContent = `Dominant shape (${largest.sizeLabel}) is dead center—safe but static. Shift it to a thirds intersection: try x=${Math.round(CANVAS_W / 3)}px or x=${Math.round((CANVAS_W * 2) / 3)}px.`;
-    placementStatus = '◐';
+    balanceContent = `Balance is symmetrical but static. The dominant shape (${largest.sizeLabel}) sits dead center—stable but inert. Shift it to a thirds intersection (x≈${Math.round(CANVAS_W / 3)} or x≈${Math.round((CANVAS_W * 2) / 3)}) to create asymmetric balance with more energy.`;
+    balanceStatus = '◐';
   } else {
     const nearestThirdX = thirdXs.reduce((a, b) => Math.abs(b - largest.x) < Math.abs(a - largest.x) ? b : a);
     const nearestThirdY = thirdYs.reduce((a, b) => Math.abs(b - largest.y) < Math.abs(a - largest.y) ? b : a);
-    placementContent = `Anchor at (${Math.round(largest.x)}, ${Math.round(largest.y)})—not in a power zone. Try snapping to (${Math.round(nearestThirdX)}, ${Math.round(nearestThirdY)}).`;
-    placementStatus = '◐';
+    balanceContent = `Balance feels accidental. The heaviest element sits at (${Math.round(largest.x)}, ${Math.round(largest.y)})—not a strong anchor zone. Snap it to (${Math.round(nearestThirdX)}, ${Math.round(nearestThirdY)}) to create intentional asymmetric balance.`;
+    balanceStatus = '◐';
   }
-  sections.push({ title: 'Placement & Thirds', content: placementContent, status: placementStatus });
+  sections.push({ title: 'Balance', content: balanceContent, status: balanceStatus });
 
-  let tensionContent = '';
-  let tensionStatus = '◐';
-  const tensionPoints = [];
-  if (hasDiagonal) { tensionPoints.push(`diagonal axis—shapes imply movement`); tensionStatus = '✓'; }
-  if (hasOverlap) { tensionPoints.push(`${overlapCount} overlapping pair${overlapCount > 1 ? 's' : ''}—creates depth`); tensionStatus = tensionStatus === '✓' ? '✓' : '◐'; }
-  if (has7030) { tensionPoints.push(`70/30 weight split (${Math.round(dominanceRatio * 100)}% dominant)—strong contrast`); tensionStatus = '✓'; }
+  // 3. Movement — eye path through the composition
+  let movementContent = '';
+  let movementStatus = '◐';
+  const movementPoints = [];
+  if (hasDiagonal) { movementPoints.push(`diagonal axis that pulls the eye through the frame`); movementStatus = '✓'; }
+  if (hasOverlap) { movementPoints.push(`${overlapCount} overlapping pair${overlapCount > 1 ? 's' : ''} that create depth and imply sequence`); movementStatus = movementStatus === '✓' ? '✓' : '◐'; }
+  if (has7030) { movementPoints.push(`70/30 weight split (${Math.round(dominanceRatio * 100)}% dominant) that gives the eye a clear entry point`); movementStatus = '✓'; }
 
-  if (tensionPoints.length >= 2) {
-    tensionContent = `Good tension: ${tensionPoints.join(' and ')}. The composition has energy.`;
-  } else if (tensionPoints.length === 1) {
-    tensionContent = `Some tension via ${tensionPoints[0]}.`;
-    if (!hasDiagonal && n >= 3) tensionContent += ` Arrange shapes along a diagonal for more action.`;
-    if (!hasOverlap) tensionContent += ` Let shapes overlap—isolated shapes feel timid.`;
-    if (!has7030) tensionContent += ` Aim for a 70/30 weight split.`;
+  if (movementPoints.length >= 2) {
+    movementContent = `Strong movement: ${movementPoints.join(' and ')}. The eye enters, travels, and lands—the composition has a readable path.`;
+  } else if (movementPoints.length === 1) {
+    movementContent = `Some movement via ${movementPoints[0]}, but the path stalls.`;
+    if (!hasDiagonal && n >= 3) movementContent += ` A diagonal arrangement (large upper-left, small lower-right) would give the eye a direction to follow.`;
+    if (!hasOverlap) movementContent += ` Overlapping shapes create implied sequence—let at least one pair touch.`;
+    if (!has7030) movementContent += ` A 70/30 dominant/accent split establishes where the eye enters.`;
   } else {
-    const issues = [];
-    if (!hasDiagonal) issues.push(`no diagonal`);
-    if (!hasOverlap) issues.push(`no overlap`);
-    if (!has7030) issues.push(`no 70/30 split`);
-    tensionContent = `Low tension: ${issues.join(', ')}. Place shapes on a diagonal, let at least one pair overlap, and let your dominant shape claim ~70% of total visual weight.`;
-    tensionStatus = '✗';
+    movementContent = `No movement—the eye lands and stops. Shapes are isolated, same-weight, and unconnected.${!hasDiagonal ? ' Arrange them along a diagonal.' : ''}${!hasOverlap ? ' Let at least one pair overlap.' : ''}${!has7030 ? ' Let one shape claim ~70% of total visual weight.' : ''}`;
+    movementStatus = '✗';
   }
-  sections.push({ title: 'Tension & Movement', content: tensionContent, status: tensionStatus });
+  sections.push({ title: 'Movement', content: movementContent, status: movementStatus });
 
+  // 4. White Space — intentional use of empty area
   const usedSpace = Math.round(coverage * 100);
   let spaceContent = '';
   let spaceStatus = '◐';
   if (coverage < 0.12) {
-    spaceContent = `Very sparse (${usedSpace}% filled). Cluster shapes into one zone so the empty space becomes an intentional void rather than just emptiness.`;
+    spaceContent = `White space is abundant (${usedSpace}% filled) but feels incidental rather than designed. Cluster shapes into a defined zone—empty space only works when it's intentional, framing something rather than just surrounding it.`;
     spaceStatus = '◐';
   } else if (coverage < 0.30) {
-    spaceContent = `Good tension between filled and empty (${usedSpace}% filled). Negative space is doing work—it makes the shapes feel considered.`;
+    spaceContent = `White space is working (${usedSpace}% filled). The empty areas frame the shapes and give them room to breathe—this reads as a considered composition, not a crowded one.`;
     spaceStatus = '✓';
   } else if (coverage < 0.50) {
-    spaceContent = `Getting tight (${usedSpace}% filled). Try removing the smallest shape—negative space is a compositional element, not leftover area.`;
+    spaceContent = `White space is getting crowded (${usedSpace}% filled). Remove the smallest shape and re-evaluate—white space is a compositional element, not leftover area. Less is more here.`;
     spaceStatus = '◐';
   } else {
-    spaceContent = `Overcrowded (${usedSpace}% filled). Remove shapes until you're under 30% coverage, then re-evaluate.`;
+    spaceContent = `White space has been eliminated (${usedSpace}% filled). The composition is overcrowded—shapes have no room to be seen individually. Remove shapes until coverage drops below 30%, then assess the remaining relationships.`;
     spaceStatus = '✗';
   }
-  sections.push({ title: 'Negative Space', content: spaceContent, status: spaceStatus });
+  sections.push({ title: 'White Space', content: spaceContent, status: spaceStatus });
 
+  // 5. Fix This First — one concrete action
   const directives = [];
   if (largestRatio < 3) {
     const bigTarget = Math.round(Math.sqrt(totalArea * 0.6));
-    directives.push(`Make one shape undeniably the biggest—try ${bigTarget * 2}×${Math.round(bigTarget * 1.3)} while keeping your smallest under ${smallest.sizeLabel}.`);
+    directives.push(`Emphasis is broken—scale one shape to ${bigTarget * 2}×${Math.round(bigTarget * 1.3)} while keeping your smallest under ${smallest.sizeLabel}. Size difference should feel almost uncomfortable.`);
   }
   if (!largestNearThirds) {
     const tx = thirdXs[largest.x > cx ? 1 : 0];
     const ty = thirdYs[largest.y > cy ? 1 : 0];
-    directives.push(`Snap your anchor shape to a thirds intersection at approximately (${Math.round(tx)}, ${Math.round(ty)}).`);
+    directives.push(`Balance is unanchored—move the dominant shape to the thirds intersection at (${Math.round(tx)}, ${Math.round(ty)}).`);
   }
   if (!hasDiagonal && n >= 3) {
-    directives.push(`Arrange shapes along a diagonal—big upper-left, small lower-right (or reverse).`);
+    directives.push(`Movement is absent—arrange shapes along a diagonal: largest upper-left, smallest lower-right (or reverse). The eye needs a path.`);
   }
   if (!hasOverlap) {
-    directives.push(`Let shapes overlap. Even 10–20% overlap creates depth and makes the layout feel like a system.`);
+    directives.push(`Overlap at least one pair of shapes. Even 15% overlap creates depth and makes the layout read as a system instead of isolated objects.`);
   }
   if (Math.abs(offsetX) < 40 && Math.abs(offsetY) < 40) {
-    directives.push(`Push the center of gravity off to one side—deliberate imbalance creates more energy than symmetry.`);
-  }
-  if (spread > 250 && largestRatio < 3) {
-    directives.push(`Shapes are spread out but nothing anchors the composition. Establish one dominant shape that the others orbit.`);
-  }
-  if (!hasAccent && n >= 3) {
-    directives.push(`Introduce one accent color on the smallest shape—a single pop among neutrals draws the eye instantly.`);
+    directives.push(`Push the visual center of gravity off to one side—deliberate asymmetric balance has more energy than accidental symmetry.`);
   }
 
   const directivesText = directives.length > 0
-    ? directives.slice(0, 3).map((d, i) => `${i + 1}. ${d}`).join('\n')
-    : `Strong bones. Push further: let shapes bleed off the edge, or add a tiny accent shape far from the main cluster.`;
+    ? directives[0]
+    : `Strong composition. Push further: let a shape bleed off the canvas edge, or introduce one tiny accent shape far from the main cluster to create tension across distance.`;
 
-  sections.push({ title: 'Directives', content: directivesText, status: '→' });
+  sections.push({ title: 'Fix This First', content: directivesText, status: '→' });
 
   return sections;
 }
