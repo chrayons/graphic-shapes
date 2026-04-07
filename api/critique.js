@@ -47,6 +47,9 @@ export default async function handler(req, res) {
   if (!imageDataUrl) {
     return res.status(400).json({ error: 'Missing imageDataUrl' });
   }
+  if (imageDataUrl.length > 5_000_000) {
+    return res.status(413).json({ error: 'Image too large' });
+  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

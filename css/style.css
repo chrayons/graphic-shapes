@@ -307,6 +307,9 @@ html, body {
 .last-feedback-wrap {
   margin-top: var(--space-md);
   border-top: 1px solid var(--border-light);
+  max-width: 360px;
+  width: 100%;
+  align-self: center;
 }
 .last-feedback-wrap.hidden {
   display: none;
